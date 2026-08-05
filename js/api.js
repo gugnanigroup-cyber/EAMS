@@ -43,48 +43,62 @@ const API = {
             });
         }
 
-        try {
-            const response = await fetch(url, {
-                method: "POST",
-                body: JSON.stringify(payload)
-            });
+        const maxRetries = 3;
+        let attempt = 0;
+        let lastError = null;
 
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
-            }
-
-            const data = await response.json();
-            
-            if (showLoader) Swal.close();
-
-            if (data && data.status === "Error") {
-                // If token invalid, auto logout
-                if (data.message && data.message.includes("Token expired")) {
-                    Auth.logout("Your session has expired. Please login again.");
-                    return data;
-                }
-                
-                Swal.fire({
-                    icon: "error",
-                    title: "Transaction Failure",
-                    text: data.message || "An unknown database error occurred.",
-                    confirmButtonColor: "#E4002B"
+        while (attempt < maxRetries) {
+            try {
+                const response = await fetch(url, {
+                    method: "POST",
+                    body: JSON.stringify(payload)
                 });
-            }
 
-            return data;
-        } catch (error) {
-            console.error("API Call error:", error);
-            if (showLoader) Swal.close();
-            
-            Swal.fire({
-                icon: "error",
-                title: "Network Gateway Error",
-                text: "Failed to connect to the Apps Script database. Please verify internet connection and Web App configuration.",
-                confirmButtonColor: "#E4002B"
-            });
-            
-            throw error;
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+                
+                if (showLoader) Swal.close();
+
+                if (data && data.status === "Error") {
+                    // If token invalid, auto logout
+                    if (data.message && data.message.includes("Token expired")) {
+                        Auth.logout("Your session has expired. Please login again.");
+                        return data;
+                    }
+                    
+                    Swal.fire({
+                        icon: "error",
+                        title: "Transaction Failure",
+                        text: data.message || "An unknown database error occurred.",
+                        confirmButtonColor: "#E4002B"
+                    });
+                }
+
+                return data;
+            } catch (error) {
+                attempt++;
+                lastError = error;
+                console.warn(`API call attempt ${attempt} failed:`, error);
+                
+                if (attempt < maxRetries) {
+                    const delay = attempt * 500; // 500ms, 1000ms delay
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                }
+            }
         }
+
+        if (showLoader) Swal.close();
+        
+        Swal.fire({
+            icon: "error",
+            title: "Network Gateway Error",
+            text: "Failed to connect to the Apps Script database. Please verify internet connection and Web App configuration.",
+            confirmButtonColor: "#E4002B"
+        });
+        
+        throw lastError;
     }
 };
